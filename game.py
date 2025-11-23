@@ -1,118 +1,224 @@
 import streamlit as st
 from random import randint
 
-# ---------- PAGE CONFIG ----------
 st.set_page_config(
-    page_title="Guess The Number - Two Player Game",
+    page_title="Guess The Number - Two Player (Chat)",
     page_icon="🎯",
     layout="centered",
 )
 
-st.title("🎯 Guess The Number (Two Player Game)")
-st.write("Two players compete to guess their own secret number (between 1 and 100) in the fewest attempts.")
+# ---------- HELPERS ----------
 
-# ---------- SESSION STATE SETUP ----------
-if "number1" not in st.session_state:
+def add_message(role: str, content: str):
+    """Append a chat message to the session history."""
+    st.session_state.messages.append({"role": role, "content": content})
+
+
+def init_game():
+    """Initialize game state for the first time."""
+    st.session_state.messages = []
     st.session_state.number1 = randint(1, 100)
-if "number2" not in st.session_state:
     st.session_state.number2 = randint(1, 100)
-if "attempts1" not in st.session_state:
     st.session_state.attempts1 = 0
-if "attempts2" not in st.session_state:
     st.session_state.attempts2 = 0
-if "phase" not in st.session_state:
-    st.session_state.phase = "player1"   # phases: player1, player2, result
-if "p1name" not in st.session_state:
+    st.session_state.phase = "get_p1_name"  # get_p1_name, p1_guessing, get_p2_name, p2_guessing, result
     st.session_state.p1name = ""
-if "p2name" not in st.session_state:
     st.session_state.p2name = ""
 
-
-# ---------- PLAYER 1 PHASE ----------
-if st.session_state.phase == "player1":
-    st.header("Player 1")
-
-    st.session_state.p1name = st.text_input(
-        "Enter Player 1 name:", 
-        value=st.session_state.p1name,
-        key="p1name_input"
+    add_message("assistant", "🎯 **Welcome to Guess The Number - Two Player (Chat Edition)!**")
+    add_message(
+        "assistant",
+        "We will play exactly like in the terminal:\n\n"
+        "1. First, **Player 1** will try to guess a secret number between 1 and 100.\n"
+        "2. Then, **Player 2** will do the same with a different secret number.\n"
+        "3. Whoever guesses their number in fewer attempts **wins**.\n\n"
+        "👉 Player 1, please type your **name** to begin."
     )
 
-    guess = st.number_input(
-        "Guess the number (1–100):",
-        min_value=1,
-        max_value=100,
-        value=1,
-        key="g1"
-    )
 
-    if st.button("Submit Guess (Player 1)"):
+def reset_game():
+    """Start a fresh new game but keep the chat history."""
+    st.session_state.number1 = randint(1, 100)
+    st.session_state.number2 = randint(1, 100)
+    st.session_state.attempts1 = 0
+    st.session_state.attempts2 = 0
+    st.session_state.phase = "get_p1_name"
+    st.session_state.p1name = ""
+    st.session_state.p2name = ""
+    add_message("assistant", "🔄 New game started! Player 1, please type your **name** to begin.")
+
+
+def handle_input(user_text: str):
+    """Main game logic that reacts to user input based on the current phase."""
+    user_text = user_text.strip()
+    phase = st.session_state.phase
+
+    # Show what the user typed
+    add_message("user", user_text)
+
+    # ---- PHASE: GET PLAYER 1 NAME ----
+    if phase == "get_p1_name":
+        if not user_text:
+            add_message("assistant", "Please type a valid name for Player 1.")
+            return
+
+        st.session_state.p1name = user_text
+        st.session_state.phase = "p1_guessing"
+
+        add_message(
+            "assistant",
+            f"Hi **{st.session_state.p1name}**! 👋\n"
+            "I have chosen a secret number between **1 and 100** for you.\n"
+            "Type your **first guess** (just the number, like `45`)."
+        )
+        return
+
+    # ---- PHASE: PLAYER 1 GUESSING ----
+    if phase == "p1_guessing":
+        # Validate integer guess
+        try:
+            guess = int(user_text)
+        except ValueError:
+            add_message("assistant", "❌ Please enter a valid **number** between 1 and 100.")
+            return
+
+        if guess < 1 or guess > 100:
+            add_message("assistant", "⚠️ Your guess must be between **1 and 100**.")
+            return
+
         st.session_state.attempts1 += 1
+        target = st.session_state.number1
 
-        if guess == st.session_state.number1:
-            st.success("🎉 Correct! Player 1 guessed the number!")
-            st.session_state.phase = "player2"
-        elif guess < st.session_state.number1:
-            st.warning("Higher number please ⬆️")
+        if guess == target:
+            add_message(
+                "assistant",
+                f"🎉 Correct, **{st.session_state.p1name}**! You guessed the number "
+                f"`{target}` in **{st.session_state.attempts1}** attempts.\n\n"
+                "👉 Now, it's **Player 2**’s turn.\n"
+                "Player 2, please type your **name**."
+            )
+            st.session_state.phase = "get_p2_name"
+        elif guess < target:
+            add_message(
+                "assistant",
+                f"⬆️ The secret number is **higher** than `{guess}`.\n"
+                f"Attempts so far: **{st.session_state.attempts1}**.\n"
+                "Guess again!"
+            )
         else:
-            st.warning("Lower number please ⬇️")
+            add_message(
+                "assistant",
+                f"⬇️ The secret number is **lower** than `{guess}`.\n"
+                f"Attempts so far: **{st.session_state.attempts1}**.\n"
+                "Guess again!"
+            )
+        return
 
-        st.write(f"Attempts used: {st.session_state.attempts1}/100")
+    # ---- PHASE: GET PLAYER 2 NAME ----
+    if phase == "get_p2_name":
+        if not user_text:
+            add_message("assistant", "Please type a valid name for Player 2.")
+            return
 
+        st.session_state.p2name = user_text
+        st.session_state.phase = "p2_guessing"
 
-# ---------- PLAYER 2 PHASE ----------
-elif st.session_state.phase == "player2":
-    st.header("Player 2")
+        add_message(
+            "assistant",
+            f"Hi **{st.session_state.p2name}**! 👋\n"
+            "I have chosen a secret number between **1 and 100** for you.\n"
+            "Type your **first guess** (just the number, like `72`)."
+        )
+        return
 
-    st.session_state.p2name = st.text_input(
-        "Enter Player 2 name:", 
-        value=st.session_state.p2name,
-        key="p2name_input"
-    )
+    # ---- PHASE: PLAYER 2 GUESSING ----
+    if phase == "p2_guessing":
+        try:
+            guess = int(user_text)
+        except ValueError:
+            add_message("assistant", "❌ Please enter a valid **number** between 1 and 100.")
+            return
 
-    guess = st.number_input(
-        "Guess the number (1–100):",
-        min_value=1,
-        max_value=100,
-        value=1,
-        key="g2"
-    )
+        if guess < 1 or guess > 100:
+            add_message("assistant", "⚠️ Your guess must be between **1 and 100**.")
+            return
 
-    if st.button("Submit Guess (Player 2)"):
         st.session_state.attempts2 += 1
+        target = st.session_state.number2
 
-        if guess == st.session_state.number2:
-            st.success("🎉 Correct! Player 2 guessed the number!")
+        if guess == target:
+            add_message(
+                "assistant",
+                f"🎉 Correct, **{st.session_state.p2name}**! You guessed the number "
+                f"`{target}` in **{st.session_state.attempts2}** attempts."
+            )
             st.session_state.phase = "result"
-        elif guess < st.session_state.number2:
-            st.warning("Higher number please ⬆️")
+
+            # Show final result
+            p1 = st.session_state.attempts1
+            p2 = st.session_state.attempts2
+            name1 = st.session_state.p1name or "Player 1"
+            name2 = st.session_state.p2name or "Player 2"
+
+            result_msg = (
+                "🏆 **Game Results**\n\n"
+                f"- {name1} attempts: **{p1}**\n"
+                f"- {name2} attempts: **{p2}**\n\n"
+            )
+
+            if p1 == p2:
+                result_msg += "🤝 It's a **draw**! Both players took the same number of attempts."
+            elif p1 < p2:
+                result_msg += f"🥇 **{name1} wins!** 🎉"
+            else:
+                result_msg += f"🥇 **{name2} wins!** 🎉"
+
+            result_msg += "\n\nType **`play again`** to start a new game, or anything else to end."
+            add_message("assistant", result_msg)
+        elif guess < target:
+            add_message(
+                "assistant",
+                f"⬆️ The secret number is **higher** than `{guess}`.\n"
+                f"Attempts so far: **{st.session_state.attempts2}**.\n"
+                "Guess again!"
+            )
         else:
-            st.warning("Lower number please ⬇️")
+            add_message(
+                "assistant",
+                f"⬇️ The secret number is **lower** than `{guess}`.\n"
+                f"Attempts so far: **{st.session_state.attempts2}**.\n"
+                "Guess again!"
+            )
+        return
 
-        st.write(f"Attempts used: {st.session_state.attempts2}/100")
+    # ---- PHASE: RESULT (ASK TO PLAY AGAIN) ----
+    if phase == "result":
+        if user_text.lower() in ["play again", "again", "yes", "y", "restart", "replay"]:
+            reset_game()
+        else:
+            add_message(
+                "assistant",
+                "👋 Thanks for playing! If you want to start over later, just type **`play again`**."
+            )
+        return
 
 
-# ---------- RESULTS PHASE ----------
-elif st.session_state.phase == "result":
-    st.header("🏆 Game Results")
+# ---------- MAIN APP ----------
 
-    p1_attempts = st.session_state.attempts1
-    p2_attempts = st.session_state.attempts2
-    p1_name = st.session_state.p1name or "Player 1"
-    p2_name = st.session_state.p2name or "Player 2"
+st.title("🎯 Guess The Number - Two Player (Chat Mode)")
 
-    st.write(f"**{p1_name}'s attempts:** {p1_attempts}")
-    st.write(f"**{p2_name}'s attempts:** {p2_attempts}")
+# Initialize state once
+if "messages" not in st.session_state:
+    init_game()
 
-    if p1_attempts == p2_attempts:
-        st.info("🤝 It's a draw!")
-    elif p1_attempts < p2_attempts:
-        st.success(f"🎉 {p1_name} wins!")
-    else:
-        st.success(f"🎉 {p2_name} wins!")
+# Display chat history
+for msg in st.session_state.messages:
+    with st.chat_message(msg["role"]):
+        st.markdown(msg["content"])
 
-    if st.button("Play Again"):
-        # Clear all session state safely
-        for key in list(st.session_state.keys()):
-            del st.session_state[key]
-        st.rerun()
+# Chat input at the bottom
+user_input = st.chat_input("Type here...")
+
+if user_input is not None:
+    handle_input(user_input)
+    st.rerun()

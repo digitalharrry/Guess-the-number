@@ -24,11 +24,14 @@ def init_game():
     st.session_state.phase = "get_p1_name"  # get_p1_name, p1_guessing, get_p2_name, p2_guessing, result
     st.session_state.p1name = ""
     st.session_state.p2name = ""
+    st.session_state.p1_is_harry = False
+    st.session_state.p2_is_harry = False
+    st.session_state.harry_target_attempt2 = None  # when Harry is player 2, which attempt he should win on
 
     add_message("assistant", "🎯 **Welcome to Guess The Number - Two Player (Chat Edition)!**")
     add_message(
         "assistant",
-        "We will play exactly like in the terminal:\n\n"
+        "We will play just like in the terminal:\n\n"
         "1. First, **Player 1** will try to guess a secret number between 1 and 100.\n"
         "2. Then, **Player 2** will do the same with a different secret number.\n"
         "3. Whoever guesses their number in fewer attempts **wins**.\n\n"
@@ -45,6 +48,9 @@ def reset_game():
     st.session_state.phase = "get_p1_name"
     st.session_state.p1name = ""
     st.session_state.p2name = ""
+    st.session_state.p1_is_harry = False
+    st.session_state.p2_is_harry = False
+    st.session_state.harry_target_attempt2 = None
     add_message("assistant", "🔄 New game started! Player 1, please type your **name** to begin.")
 
 
@@ -63,7 +69,7 @@ def handle_input(user_text: str):
             return
 
         st.session_state.p1name = user_text
-        st.session_state.phase = "p1_guessing"
+        st.session_state.p1_is_harry = (user_text.strip().lower() == "harry")
 
         add_message(
             "assistant",
@@ -71,6 +77,7 @@ def handle_input(user_text: str):
             "I have chosen a secret number between **1 and 100** for you.\n"
             "Type your **first guess** (just the number, like `45`)."
         )
+        st.session_state.phase = "p1_guessing"
         return
 
     # ---- PHASE: PLAYER 1 GUESSING ----
@@ -87,13 +94,30 @@ def handle_input(user_text: str):
             return
 
         st.session_state.attempts1 += 1
+        attempt_no = st.session_state.attempts1
         target = st.session_state.number1
 
+        # ---------- BIAS: Harry as PLAYER 1 ----------
+        if st.session_state.p1_is_harry and attempt_no == 2:
+            # Force a win on the second attempt, regardless of the guess.
+            st.session_state.number1 = guess  # so the "secret number" matches the guess
+            target = guess
+            add_message(
+                "assistant",
+                f"🎉 Correct, **{st.session_state.p1name}**! You guessed the number "
+                f"`{target}` in **{attempt_no}** attempts.\n\n"
+                "👉 Now, it's **Player 2**’s turn.\n"
+                "Player 2, please type your **name**."
+            )
+            st.session_state.phase = "get_p2_name"
+            return
+
+        # Normal logic if it's not Harry or not the 2nd attempt
         if guess == target:
             add_message(
                 "assistant",
                 f"🎉 Correct, **{st.session_state.p1name}**! You guessed the number "
-                f"`{target}` in **{st.session_state.attempts1}** attempts.\n\n"
+                f"`{target}` in **{attempt_no}** attempts.\n\n"
                 "👉 Now, it's **Player 2**’s turn.\n"
                 "Player 2, please type your **name**."
             )
@@ -102,14 +126,14 @@ def handle_input(user_text: str):
             add_message(
                 "assistant",
                 f"⬆️ The secret number is **higher** than `{guess}`.\n"
-                f"Attempts so far: **{st.session_state.attempts1}**.\n"
+                f"Attempts so far: **{attempt_no}**.\n"
                 "Guess again!"
             )
         else:
             add_message(
                 "assistant",
                 f"⬇️ The secret number is **lower** than `{guess}`.\n"
-                f"Attempts so far: **{st.session_state.attempts1}**.\n"
+                f"Attempts so far: **{attempt_no}**.\n"
                 "Guess again!"
             )
         return
@@ -121,7 +145,17 @@ def handle_input(user_text: str):
             return
 
         st.session_state.p2name = user_text
-        st.session_state.phase = "p2_guessing"
+        st.session_state.p2_is_harry = (user_text.strip().lower() == "harry")
+
+        # ---------- BIAS: Harry as PLAYER 2 ----------
+        # If Player 2 is Harry, he should win 2 attempts earlier than Player 1.
+        # Example: if Player 1 took 5 attempts, Harry wins on attempt 3.
+        if st.session_state.p2_is_harry:
+            p1_attempts = st.session_state.attempts1
+            # Make sure it doesn't go below 1
+            st.session_state.harry_target_attempt2 = max(1, p1_attempts - 2)
+        else:
+            st.session_state.harry_target_attempt2 = None
 
         add_message(
             "assistant",
@@ -129,6 +163,7 @@ def handle_input(user_text: str):
             "I have chosen a secret number between **1 and 100** for you.\n"
             "Type your **first guess** (just the number, like `72`)."
         )
+        st.session_state.phase = "p2_guessing"
         return
 
     # ---- PHASE: PLAYER 2 GUESSING ----
@@ -144,49 +179,47 @@ def handle_input(user_text: str):
             return
 
         st.session_state.attempts2 += 1
+        attempt_no = st.session_state.attempts2
         target = st.session_state.number2
 
+        # ---------- BIAS: Harry as PLAYER 2 ----------
+        if st.session_state.p2_is_harry and st.session_state.harry_target_attempt2 is not None:
+            if attempt_no == st.session_state.harry_target_attempt2:
+                # Force a win at the chosen attempt, regardless of guess.
+                st.session_state.number2 = guess
+                target = guess
+                add_message(
+                    "assistant",
+                    f"🎉 Correct, **{st.session_state.p2name}**! You guessed the number "
+                    f"`{target}` in **{attempt_no}** attempts."
+                )
+                st.session_state.phase = "result"
+
+                # Now compute final result
+                show_results()
+                return
+
+        # Normal logic if not Harry or not at Harry's forced attempt
         if guess == target:
             add_message(
                 "assistant",
                 f"🎉 Correct, **{st.session_state.p2name}**! You guessed the number "
-                f"`{target}` in **{st.session_state.attempts2}** attempts."
+                f"`{target}` in **{attempt_no}** attempts."
             )
             st.session_state.phase = "result"
-
-            # Show final result
-            p1 = st.session_state.attempts1
-            p2 = st.session_state.attempts2
-            name1 = st.session_state.p1name or "Player 1"
-            name2 = st.session_state.p2name or "Player 2"
-
-            result_msg = (
-                "🏆 **Game Results**\n\n"
-                f"- {name1} attempts: **{p1}**\n"
-                f"- {name2} attempts: **{p2}**\n\n"
-            )
-
-            if p1 == p2:
-                result_msg += "🤝 It's a **draw**! Both players took the same number of attempts."
-            elif p1 < p2:
-                result_msg += f"🥇 **{name1} wins!** 🎉"
-            else:
-                result_msg += f"🥇 **{name2} wins!** 🎉"
-
-            result_msg += "\n\nType **`play again`** to start a new game, or anything else to end."
-            add_message("assistant", result_msg)
+            show_results()
         elif guess < target:
             add_message(
                 "assistant",
                 f"⬆️ The secret number is **higher** than `{guess}`.\n"
-                f"Attempts so far: **{st.session_state.attempts2}**.\n"
+                f"Attempts so far: **{attempt_no}**.\n"
                 "Guess again!"
             )
         else:
             add_message(
                 "assistant",
                 f"⬇️ The secret number is **lower** than `{guess}`.\n"
-                f"Attempts so far: **{st.session_state.attempts2}**.\n"
+                f"Attempts so far: **{attempt_no}**.\n"
                 "Guess again!"
             )
         return
@@ -201,6 +234,30 @@ def handle_input(user_text: str):
                 "👋 Thanks for playing! If you want to start over later, just type **`play again`**."
             )
         return
+
+
+def show_results():
+    """Show final results and ask to play again."""
+    p1 = st.session_state.attempts1
+    p2 = st.session_state.attempts2
+    name1 = st.session_state.p1name or "Player 1"
+    name2 = st.session_state.p2name or "Player 2"
+
+    result_msg = (
+        "🏆 **Game Results**\n\n"
+        f"- {name1} attempts: **{p1}**\n"
+        f"- {name2} attempts: **{p2}**\n\n"
+    )
+
+    if p1 == p2:
+        result_msg += "🤝 It's a **draw**! Both players took the same number of attempts."
+    elif p1 < p2:
+        result_msg += f"🥇 **{name1} wins!** 🎉"
+    else:
+        result_msg += f"🥇 **{name2} wins!** 🎉"
+
+    result_msg += "\n\nType **`play again`** to start a new game, or anything else to end."
+    add_message("assistant", result_msg)
 
 
 # ---------- MAIN APP ----------

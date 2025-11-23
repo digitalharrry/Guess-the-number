@@ -69,7 +69,9 @@ def handle_input(user_text: str):
             return
 
         st.session_state.p1name = user_text
-        st.session_state.p1_is_harry = (user_text.strip().lower() == "harry")
+        biased_names = ["harry", "harinder"]
+        st.session_state.p1_is_harry = (user_text.strip().lower() in biased_names)
+
 
         add_message(
             "assistant",
@@ -145,7 +147,8 @@ def handle_input(user_text: str):
             return
 
         st.session_state.p2name = user_text
-        st.session_state.p2_is_harry = (user_text.strip().lower() == "harry")
+        biased_names = ["harry", "harinder"]
+        st.session_state.p2_is_harry = (user_text.strip().lower() in biased_names)
 
         # ---------- BIAS: Harry as PLAYER 2 ----------
         # If Player 2 is Harry, he should win 2 attempts earlier than Player 1.
@@ -279,3 +282,4 @@ user_input = st.chat_input("Type here...")
 if user_input is not None:
     handle_input(user_input)
     st.rerun()
+
